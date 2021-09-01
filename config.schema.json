@@ -1,7 +1,7 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
-  "pluginType": "platform",
-  "singular": true,
+  "pluginAlias": "SonoffRFBridgeAccessory",
+  "pluginType": "accessory",
+  "singular": false,
   "schema": {
     "type": "object",
     "properties": {
@@ -9,7 +9,43 @@
         "title": "Name",
         "type": "string",
         "required": true,
-        "default": "Example Dynamic Platform"
+        "default": "Blinds Name"
+      },
+      "mqttUrl": {
+        "title": "Name",
+        "type": "string",
+        "required": true,
+        "default": "mqtt://localhost:1883"
+      },
+      "mqttTopic": {
+        "title": "Name",
+        "type": "string",
+        "required": true,
+        "default": "cmnd/sonoffRFBridge/Backlog"
+      },
+      "upRfCommand": {
+        "title": "Up Rf Command",
+        "type": "string",
+        "required": true,
+        "default": "AAA806014D44B3611155"
+      },
+      "downRfCommand": {
+        "title": "Down Rf Command",
+        "type": "string",
+        "required": true,
+        "default": "AAA806014D44B3613355"
+      },
+      "stopRfCommand": {
+        "title": "Stop Rf Command",
+        "type": "string",
+        "required": true,
+        "default": "AAA806014D44B3615555"
+      },
+      "blindsTime": {
+        "title": "Blinds total time (ms)",
+        "type": "integer",
+        "required": false,
+        "default": "20000"
       }
     }
   }

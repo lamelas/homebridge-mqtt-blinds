@@ -1,141 +1,137 @@
-import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import {
+  AccessoryConfig,
+  AccessoryPlugin,
+  API,
+  Characteristic,
+  CharacteristicEventTypes,
+  CharacteristicGetCallback,
+  CharacteristicSetCallback,
+  CharacteristicValue,
+  Logging,
+  Service,
+} from 'homebridge';
 
-import { ExampleHomebridgePlatform } from './platform';
+import { connect, MqttClient } from 'mqtt';
 
-/**
- * Platform Accessory
- * An instance of this class is created for each accessory your platform registers
- * Each accessory may expose multiple services of different service types.
+/*
+ * IMPORTANT NOTICE
+ *
+ * One thing you need to take care of is, that you never ever ever import anything directly from the "homebridge" module (or the "hap-nodejs" module).
+ * The above import block may seem like, that we do exactly that, but actually those imports are only used for types and interfaces
+ * and will disappear once the code is compiled to Javascript.
+ * In fact you can check that by running `npm run build` and opening the compiled Javascript file in the `dist` folder.
+ * You will notice that the file does not contain a `... = require("homebridge");` statement anywhere in the code.
+ *
+ * The contents of the above import statement MUST ONLY be used for type annotation or accessing things like CONST ENUMS,
+ * which is a special case as they get replaced by the actual value and do not remain as a reference in the compiled code.
+ * Meaning normal enums are bad, const enums can be used.
+ *
+ * You MUST NOT import anything else which remains as a reference in the code, as this will result in
+ * a `... = require("homebridge");` to be compiled into the final Javascript code.
+ * This typically leads to unexpected behavior at runtime, as in many cases it won't be able to find the module
+ * or will import another instance of homebridge causing collisions.
+ *
+ * To mitigate this the {@link API | Homebridge API} exposes the whole suite of HAP-NodeJS inside the `hap` property
+ * of the api object, which can be acquired for example in the initializer function. This reference can be stored
+ * like this for example and used to access all exported variables and classes from HAP-NodeJS.
  */
-export class ExamplePlatformAccessory {
-  private service: Service;
 
-  /**
-   * These are just used to create a working example
-   * You should implement your own code to track the state of your accessory
-   */
-  private exampleStates = {
-    On: false,
-    Brightness: 100,
-  };
+/*
+ * Initializer function called when the plugin is loaded.
+ */
 
-  constructor(
-    private readonly platform: ExampleHomebridgePlatform,
-    private readonly accessory: PlatformAccessory,
-  ) {
+export class SonoffRFBridgeAccessory implements AccessoryPlugin {
 
-    // set accessory information
-    this.accessory.getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Default-Manufacturer')
-      .setCharacteristic(this.platform.Characteristic.Model, 'Default-Model')
-      .setCharacteristic(this.platform.Characteristic.SerialNumber, 'Default-Serial');
+  private readonly log: Logging;
 
-    // get the LightBulb service if it exists, otherwise create a new LightBulb service
-    // you can create multiple services for each accessory
-    this.service = this.accessory.getService(this.platform.Service.Lightbulb) || this.accessory.addService(this.platform.Service.Lightbulb);
+  private readonly name: string;
+  private readonly mqttClient: MqttClient;
+  private readonly mqttTopic: string;
 
-    // set the service name, this is what is displayed as the default name on the Home app
-    // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
-    this.service.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.exampleDisplayName);
+  private readonly rfCommands: string[];
 
-    // each service must implement at-minimum the "required characteristics" for the given service type
-    // see https://developers.homebridge.io/#/service/Lightbulb
+  private state = 0; // 1 cima 0 stop 2 baixo
 
-    // register handlers for the On/Off Characteristic
-    this.service.getCharacteristic(this.platform.Characteristic.On)
-      .onSet(this.setOn.bind(this))                // SET - bind to the `setOn` method below
-      .onGet(this.getOn.bind(this));               // GET - bind to the `getOn` method below
+  private readonly serviceCima: Service;
+  private readonly serviceBaixo: Service;
+  private readonly informationService: Service;
 
-    // register handlers for the Brightness Characteristic
-    this.service.getCharacteristic(this.platform.Characteristic.Brightness)
-      .onSet(this.setBrightness.bind(this));       // SET - bind to the 'setBrightness` method below
+  constructor(log: Logging, config: AccessoryConfig, api: API) {
+    this.log = log;
+    this.name = config.name;
 
-    /**
-     * Creating multiple services of the same type.
-     *
-     * To avoid "Cannot add a Service with the same UUID another Service without also defining a unique 'subtype' property." error,
-     * when creating multiple services of the same type, you need to use the following syntax to specify a name and subtype id:
-     * this.accessory.getService('NAME') || this.accessory.addService(this.platform.Service.Lightbulb, 'NAME', 'USER_DEFINED_SUBTYPE_ID');
-     *
-     * The USER_DEFINED_SUBTYPE must be unique to the platform accessory (if you platform exposes multiple accessories, each accessory
-     * can use the same sub type id.)
-     */
+    this.mqttClient = connect(config.mqttUrl);
+    this.mqttTopic = config.mqttTopic;
 
-    // Example: add two "motion sensor" services to the accessory
-    const motionSensorOneService = this.accessory.getService('Motion Sensor One Name') ||
-      this.accessory.addService(this.platform.Service.MotionSensor, 'Motion Sensor One Name', 'YourUniqueIdentifier-1');
+    this.rfCommands = [
+      config.stopRfCommand,
+      config.upRfCommand,
+      config.downRfCommand,
+    ];
 
-    const motionSensorTwoService = this.accessory.getService('Motion Sensor Two Name') ||
-      this.accessory.addService(this.platform.Service.MotionSensor, 'Motion Sensor Two Name', 'YourUniqueIdentifier-2');
+    this.serviceCima = new api.hap.Service.Switch('Cima', 'UP');
+    this.serviceCima.getCharacteristic(api.hap.Characteristic.On)
+      .on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+        log.info('Current state of the switch was returned: ' + (this.state));
+        callback(undefined, this.state);
+      })
+      .on(CharacteristicEventTypes.SET, (value: CharacteristicValue, callback: CharacteristicSetCallback) => {
+        if (this.state === 2) {
+          this.serviceBaixo.setCharacteristic(api.hap.Characteristic.On, false);
+        }
 
-    /**
-     * Updating characteristics values asynchronously.
-     *
-     * Example showing how to update the state of a Characteristic asynchronously instead
-     * of using the `on('get')` handlers.
-     * Here we change update the motion sensor trigger states on and off every 10 seconds
-     * the `updateCharacteristic` method.
-     *
-     */
-    let motionDetected = false;
-    setInterval(() => {
-      // EXAMPLE - inverse the trigger
-      motionDetected = !motionDetected;
+        this.state = value ? 1 : 0;
+        this.publishMessage();
+        log.info('Switch state was set to: ' + (this.state));
+        callback();
+      });
 
-      // push the new value to HomeKit
-      motionSensorOneService.updateCharacteristic(this.platform.Characteristic.MotionDetected, motionDetected);
-      motionSensorTwoService.updateCharacteristic(this.platform.Characteristic.MotionDetected, !motionDetected);
+    this.serviceBaixo = new api.hap.Service.Switch('Baixo', 'DOWN');
+    this.serviceBaixo.getCharacteristic(api.hap.Characteristic.On)
+      .on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+        log.info('Current state of the switch was returned: ' + (this.state));
+        callback(undefined, this.state);
+      })
+      .on(CharacteristicEventTypes.SET, (value: CharacteristicValue, callback: CharacteristicSetCallback) => {
+        if (this.state === 1) {
+          this.serviceCima.setCharacteristic(api.hap.Characteristic.On, false);
+        }
 
-      this.platform.log.debug('Triggering motionSensorOneService:', motionDetected);
-      this.platform.log.debug('Triggering motionSensorTwoService:', !motionDetected);
-    }, 10000);
+        this.state = value ? 2 : 0;
+        this.publishMessage();
+        log.info('Switch state was set to: ' + (this.state));
+        callback();
+      });
+
+    this.informationService = new api.hap.Service.AccessoryInformation()
+      .setCharacteristic(api.hap.Characteristic.Manufacturer, 'Custom Manufacturer')
+      .setCharacteristic(api.hap.Characteristic.Model, 'Custom Model');
+
+    log.info('Switch finished initializing!');
   }
 
-  /**
-   * Handle "SET" requests from HomeKit
-   * These are sent when the user changes the state of an accessory, for example, turning on a Light bulb.
-   */
-  async setOn(value: CharacteristicValue) {
-    // implement your own code to turn your device on/off
-    this.exampleStates.On = value as boolean;
-
-    this.platform.log.debug('Set Characteristic On ->', value);
+  publishMessage(): void {
+    this.mqttClient.publish(this.mqttTopic, `Backlog RfRaw ${this.rfCommands[this.state]}; RfRaw 0;`);
   }
 
-  /**
-   * Handle the "GET" requests from HomeKit
-   * These are sent when HomeKit wants to know the current state of the accessory, for example, checking if a Light bulb is on.
-   *
-   * GET requests should return as fast as possbile. A long delay here will result in
-   * HomeKit being unresponsive and a bad user experience in general.
-   *
-   * If your device takes time to respond you should update the status of your device
-   * asynchronously instead using the `updateCharacteristic` method instead.
-
-   * @example
-   * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
+  /*
+   * This method is optional to implement. It is called when HomeKit ask to identify the accessory.
+   * Typical this only ever happens at the pairing process.
    */
-  async getOn(): Promise<CharacteristicValue> {
-    // implement your own code to check if the device is on
-    const isOn = this.exampleStates.On;
-
-    this.platform.log.debug('Get Characteristic On ->', isOn);
-
-    // if you need to return an error to show the device as "Not Responding" in the Home app:
-    // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
-
-    return isOn;
+  identify(): void {
+    this.log('Identify!');
   }
 
-  /**
-   * Handle "SET" requests from HomeKit
-   * These are sent when the user changes the state of an accessory, for example, changing the Brightness
+  /*
+   * This method is called directly after creation of this instance.
+   * It should return all services which should be added to the accessory.
    */
-  async setBrightness(value: CharacteristicValue) {
-    // implement your own code to set the brightness
-    this.exampleStates.Brightness = value as number;
-
-    this.platform.log.debug('Set Characteristic Brightness -> ', value);
+  getServices(): Service[] {
+    return [
+      this.serviceCima,
+      this.serviceBaixo,
+      this.informationService,
+    ];
   }
 
 }
