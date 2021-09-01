@@ -76,7 +76,7 @@ export class SonoffRFBridgeAccessory implements AccessoryPlugin {
         callback(undefined, this.state);
       })
       .on(CharacteristicEventTypes.SET, (value: CharacteristicValue, callback: CharacteristicSetCallback) => {
-        if (this.state === 2) {
+        if (this.state == 2) {
           this.serviceBaixo.setCharacteristic(api.hap.Characteristic.On, false);
         }
 
@@ -93,7 +93,7 @@ export class SonoffRFBridgeAccessory implements AccessoryPlugin {
         callback(undefined, this.state);
       })
       .on(CharacteristicEventTypes.SET, (value: CharacteristicValue, callback: CharacteristicSetCallback) => {
-        if (this.state === 1) {
+        if (this.state == 1) {
           this.serviceCima.setCharacteristic(api.hap.Characteristic.On, false);
         }
 

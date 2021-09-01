@@ -16,6 +16,7 @@ import {
 /*
  * IMPORTANT NOTICE
  *
+ // eslint-disable-next-line max-len
  * One thing you need to take care of is, that you never ever ever import anything directly from the "homebridge" module (or the "this.api.hap-nodejs" module).
  * The above import block may seem like, that we do exactly that, but actually those imports are only used for types and interfaces
  * and will disappear once the code is compiled to Javascript.
@@ -91,6 +92,7 @@ export class SonoffRFBridgePlatform implements DynamicPlatformPlugin {
   addAccessory(name: string) {
     this.log.info('Adding new accessory with name %s', name);
 
+    // eslint-disable-next-line max-len
     // uuid must be generated from a unique but not changing data source, name should not be used in the most cases. But works in this specific example.
     const uuid = this.api.hap.uuid.generate(name);
     const accessory = new this.api.platformAccessory(name, uuid);
