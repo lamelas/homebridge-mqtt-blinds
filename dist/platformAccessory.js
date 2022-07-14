@@ -33,7 +33,7 @@ class SonoffRFBridgeAccessory {
         this.state = 0; // 1 cima 0 stop 2 baixo
         this.log = log;
         this.name = config.name;
-        this.mqttClient = mqtt_1.connect(config.mqttUrl);
+        this.mqttClient = (0, mqtt_1.connect)(config.mqttUrl);
         this.mqttTopic = config.mqttTopic;
         this.rfCommands = [
             config.stopRfCommand,
@@ -70,9 +70,6 @@ class SonoffRFBridgeAccessory {
             log.info('Switch state was set to: ' + (this.state));
             callback();
         });
-        this.informationService = new api.hap.Service.AccessoryInformation()
-            .setCharacteristic(api.hap.Characteristic.Manufacturer, 'Custom Manufacturer')
-            .setCharacteristic(api.hap.Characteristic.Model, 'Custom Model');
         log.info('Switch finished initializing!');
     }
     publishMessage() {
@@ -93,7 +90,6 @@ class SonoffRFBridgeAccessory {
         return [
             this.serviceCima,
             this.serviceBaixo,
-            this.informationService,
         ];
     }
 }

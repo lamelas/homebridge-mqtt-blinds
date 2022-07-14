@@ -54,7 +54,6 @@ export class SonoffRFBridgeAccessory implements AccessoryPlugin {
 
   private readonly serviceCima: Service;
   private readonly serviceBaixo: Service;
-  private readonly informationService: Service;
 
   constructor(log: Logging, config: AccessoryConfig, api: API) {
     this.log = log;
@@ -103,10 +102,6 @@ export class SonoffRFBridgeAccessory implements AccessoryPlugin {
         callback();
       });
 
-    this.informationService = new api.hap.Service.AccessoryInformation()
-      .setCharacteristic(api.hap.Characteristic.Manufacturer, 'Custom Manufacturer')
-      .setCharacteristic(api.hap.Characteristic.Model, 'Custom Model');
-
     log.info('Switch finished initializing!');
   }
 
@@ -130,7 +125,6 @@ export class SonoffRFBridgeAccessory implements AccessoryPlugin {
     return [
       this.serviceCima,
       this.serviceBaixo,
-      this.informationService,
     ];
   }
 

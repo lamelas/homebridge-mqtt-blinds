@@ -8,7 +8,6 @@ export declare class SonoffRFBridgeAccessory implements AccessoryPlugin {
     private state;
     private readonly serviceCima;
     private readonly serviceBaixo;
-    private readonly informationService;
     constructor(log: Logging, config: AccessoryConfig, api: API);
     publishMessage(): void;
     identify(): void;
